@@ -3,9 +3,10 @@
 
 use std::path::Path;
 
-use crate::{utils, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use libtest_mimic::{Arguments, Trial};
+
+use crate::{utils, Result};
 
 #[doc(hidden)]
 pub fn runner(requirements: &[Requirements]) {
@@ -23,6 +24,7 @@ pub struct Requirements {
     test_name: String,
     root: Utf8PathBuf,
     pattern: String,
+    ignore: Option<String>,
 }
 
 impl Requirements {
@@ -32,13 +34,9 @@ impl Requirements {
         test_name: String,
         root: Utf8PathBuf,
         pattern: String,
+        ignore: Option<String>,
     ) -> Self {
-        Self {
-            test: P::convert(test),
-            test_name,
-            root,
-            pattern,
-        }
+        Self { test: P::convert(test), test_name, root, pattern, ignore }
     }
 
     /// Scans all files in a given directory, finds matching ones and generates a test descriptor
@@ -47,17 +45,23 @@ impl Requirements {
         let re = regex::Regex::new(&self.pattern)
             .unwrap_or_else(|_| panic!("invalid regular expression: '{}'", self.pattern));
 
+        let ignore_re = self.ignore.as_ref().map(|ignore| {
+            regex::Regex::new(ignore)
+                .unwrap_or_else(|_| panic!("invalid regular expression: '{}'", ignore))
+        });
+
         let tests: Vec<_> = utils::iterate_directory(&self.root)
             .filter_map(|path_res| {
                 let path = path_res.expect("error while iterating directory");
                 if re.is_match(path.as_str()) {
                     let testfn = self.test;
                     let name = utils::derive_test_name(&self.root, &path, &self.test_name);
-                    Some(Trial::test(name, move || {
-                        testfn
-                            .call(&path)
-                            .map_err(|err| format!("{:?}", err).into())
-                    }))
+                    let ignore = ignore_re.as_ref().map_or(false, |re| re.is_match(path.as_str()));
+                    let trial = Trial::test(name, move || {
+                        testfn.call(&path).map_err(|err| format!("{:?}", err).into())
+                    })
+                    .with_ignored_flag(ignore);
+                    Some(trial)
                 } else {
                     None
                 }

@@ -1,9 +1,12 @@
 // Copyright (c) The datatest-stable Contributors
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+use std::fs::File;
+use std::io::Read;
+use std::path::Path;
+
 use camino::Utf8Path;
 use datatest_stable::Result;
-use std::{fs::File, io::Read, path::Path};
 
 fn test_artifact(path: &Path) -> Result<()> {
     let mut file = File::open(path)?;
@@ -21,6 +24,7 @@ datatest_stable::harness!(
     test_artifact,
     "tests/files",
     r"^.*/*",
+    (ignore r"^.*/*-ignore"),
     test_artifact_utf8,
     "tests/files",
     r"^.*/*",
